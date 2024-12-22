@@ -16,7 +16,14 @@ uojLocaleData = {
 			return "共 " + n + " 名参赛者";
 		}
 	},
-
+	"click-zan::good": {
+		"en": "Good",
+		"zh-cn": "好评"
+	},
+	"click-zan::bad": {
+		"en": "Bad",
+		"zh-cn": "差评"
+	},
 	"editor::use advanced editor": {
 		"en": "use advanced editor",
 		"zh-cn": "使用高级编辑器"
@@ -36,6 +43,38 @@ uojLocaleData = {
 	"editor::upload from local": {
 		"en": "Upload from local",
 		"zh-cn": "从本地文件上传"
+	},
+	"quiz::empty answer alert": {
+		"en": function(empty_list) {
+			var ret = empty_list.length + " question";
+			ret += empty_list.length <= 1 ? " is" : "s are"
+			ret += " left unanswered (";
+			for (var i = 0; i < empty_list.length && i < 3; i++) {
+				if (i > 0) {
+					ret += ", ";
+				}
+				ret += "#" + empty_list[i];
+			}
+			if (empty_list.length > 3) {
+				ret += ", etc."
+			}
+			ret += "). Are your sure you want to submit?"
+			return ret;
+		},
+		"zh-cn": function(empty_list) {
+			var ret = "第";
+			for (var i = 0; i < empty_list.length && i < 3; i++) {
+				if (i > 0) {
+					ret += "、";
+				}
+				ret += empty_list[i];
+			}
+			if (empty_list.length > 3) {
+				ret += "等" + empty_list.length;
+			}
+			ret += "题尚未作答，你确定要提交吗？";
+			return ret;
+		}
 	}
 };
 
@@ -82,6 +121,9 @@ function toFilledStr(o, f, l) {
 	return s;
 }
 function getPenaltyTimeStr(x) {
+	if (x < 0) {
+		return x + " sec";
+	}
 	var ss = toFilledStr(x % 60, '0', 2);
 	x = Math.floor(x / 60);
 	var mm = toFilledStr(x % 60, '0', 2);
@@ -132,7 +174,7 @@ function getUserLink(username, rating, addSymbol) {
 	}
 	var text = username;
 	if (username.charAt(0) == '@') {
-		username = username.substr(1);
+		username = username.substring(1);
 	}
 	if (addSymbol) {
 		if (rating >= 2500) {
@@ -154,7 +196,7 @@ function getUserSpan(username, rating, addSymbol) {
 	}
 	var text = username;
 	if (username.charAt(0) == '@') {
-		username = username.substr(1);
+		username = username.substring(1);
 	}
 	if (addSymbol) {
 		if (rating >= 2500) {
@@ -213,6 +255,12 @@ function showErrorHelp(name, err) {
 function getFormErrorAndShowHelp(name, val) {
 	var err = val($('#input-' + name).val());
 	return showErrorHelp(name, err);
+}
+function disableFormSubmit(form_name) {
+	$("#button-submit-" + form_name).addClass('disabled');
+	$("#form-" + form_name).submit(function () {
+		return false;
+	});
 }
 
 function validateSettingPassword(str) {
@@ -280,13 +328,68 @@ $.fn.uoj_problem_tag = function() {
 }
 $.fn.uoj_blog_tag = function() {
 	return this.each(function() {
-		$(this).attr('href', uojBlogUrl + '/archive?tag=' + encodeURIComponent($(this).text()));
+		$(this).attr('href', '/archive?tag=' + encodeURIComponent($(this).text()));
 	});
 }
-function confirmMove(type, username, classname)
-{
-	location.href = '/class/' + classname + '/' + username + '/' + type;
+
+// click zan
+function click_zan(zan_id, zan_type, zan_delta, node) {
+	var loading_node = $('<div class="text-muted">loading...</div>');
+	$(node).replaceWith(loading_node);
+	$.post('/click-zan', {
+		id : zan_id,
+		delta : zan_delta,
+		type : zan_type
+	}, function(ret) {
+		$(loading_node).replaceWith($(ret).click_zan_block());
+	}).fail(function() {
+		$(loading_node).replaceWith('<div class="text-danger">failed</div>');
+	});
 }
+
+$.fn.click_zan_block = function() {
+	return this.each(function() {
+		var id = $(this).data('id');
+		var type = $(this).data('type');
+		var val = parseInt($(this).data('val'));
+		var cnt = parseInt($(this).data('cnt'));
+		if (isNaN(cnt)) {
+			return;
+		}
+		if (val == 1) {
+			$(this).addClass('uoj-click-zan-block-cur-up');
+		} else if (val == 0) {
+			$(this).addClass('uoj-click-zan-block-cur-zero');
+		} else if (val == -1) {
+			$(this).addClass('uoj-click-zan-block-cur-down');
+		} else {
+			return;
+		}
+		if (cnt > 0) {
+			$(this).addClass('uoj-click-zan-block-positive');
+		} else if (cnt == 0) {
+			$(this).addClass('uoj-click-zan-block-neutral');
+		} else {
+			$(this).addClass('uoj-click-zan-block-negative');
+		}
+		
+		var node = this;
+		var up_node = $('<a href="#" class="uoj-click-zan-up"><span class="glyphicon glyphicon-thumbs-up"></span>'+uojLocale('click-zan::good')+'</a>').click(function(e) {
+			e.preventDefault();
+			click_zan(id, type, 1, node);
+		});
+		var down_node = $('<a href="#" class="uoj-click-zan-down"><span class="glyphicon glyphicon-thumbs-down"></span>'+uojLocale('click-zan::bad')+'</a>').click(function(e) {
+			e.preventDefault();
+			click_zan(id, type, -1, node);
+		});
+		
+		$(this)
+			.append(up_node)
+			.append(down_node)
+			.append($('<span class="uoj-click-zan-cnt">[<strong>' + (cnt > 0 ? '+' + cnt : cnt) + '</strong>]</span>'));
+	});
+}
+
 // count down
 function getCountdownStr(t) {
 	var x = Math.floor(t);
@@ -295,7 +398,7 @@ function getCountdownStr(t) {
 	var mm = toFilledStr(x % 60, '0', 2);
 	x = Math.floor(x / 60);
 	var hh = x.toString();
-
+	
 	var res = '<span style="font-size:30px">';
 	res += '<span style="color:' + getColOfScore(Math.min(t / 10800 * 100, 100)) + '">' + hh + '</span>';
 	res += ':';
@@ -329,30 +432,60 @@ $.fn.countdown = function(rest, callback) {
 
 // update_judgement_status
 update_judgement_status_list = []
-function update_judgement_status_details(id) {
+update_judgement_status_base_delay = 500;
+update_judgement_status_delay_adder = 500;
+update_judgement_status_max_delay = 30 * 1000; // 30s
+function update_judgement_status_details(id, base_delay = 0, delay_adder = 0) {
 	update_judgement_status_list.push(id);
+	if (base_delay > update_judgement_status_base_delay) {
+		update_judgement_status_base_delay = base_delay;
+	}
+	if (delay_adder > update_judgement_status_delay_adder) {
+		update_judgement_status_delay_adder = delay_adder;
+	}
 };
 
-$(document).ready(function() {
+$(document).ready(function() {	
+	var mean_delay = update_judgement_status_base_delay + update_judgement_status_delay_adder;
+
+	function random_delay() {
+		return -Math.log(1.0 - Math.random());
+	}
+
+	var next_delay = random_delay() * mean_delay;
+
 	function update() {
 		$.get("/submission-status-details", {
 				get: update_judgement_status_list
 			},
 			function(data) {
+				is_waiting = true;
 				for (var i = 0; i < update_judgement_status_list.length; i++) {
 					$("#status_details_" + update_judgement_status_list[i]).html(data[i].html);
 					if (data[i].judged) {
 						location.reload();
 					}
+					if (!data[i].waiting) {
+						is_waiting = false;
+					}
+				}
+				if (is_waiting) {
+					mean_delay += update_judgement_status_delay_adder;
+					if (mean_delay > update_judgement_status_max_delay) {
+						mean_delay = update_judgement_status_max_delay;
+					}
+					next_delay = random_delay() * mean_delay;
+				} else {
+					next_delay = delay = update_judgement_status_base_delay;
 				}
 			}, 'json').always(
 			function() {
-				setTimeout(update, 500);
-			}
-		);
+    			setTimeout(update, next_delay);
+	    	}
+	    );
 	}
 	if (update_judgement_status_list.length > 0) {
-		setTimeout(update, 5000);
+		setTimeout(update, next_delay);
 	}
 });
 
@@ -362,11 +495,14 @@ $.fn.uoj_highlight = function() {
 		$(this).find("span.uoj-username").each(replaceWithHighlightUsername);
 		$(this).find(".uoj-honor").uoj_honor();
 		$(this).find(".uoj-score").each(function() {
-			var score = parseInt($(this).text());
-			var maxscore = parseInt($(this).data('max'));
+			var score = $(this).data('score');
 			if (isNaN(score)) {
+    			score = parseFloat($(this).text());
+    	    }
+    	    if (isNaN(score)) {
 				return;
 			}
+			var maxscore = parseFloat($(this).data('max'));
 			if (isNaN(maxscore)) {
 				$(this).css("color", getColOfScore(score));
 			} else {
@@ -387,6 +523,7 @@ $.fn.uoj_highlight = function() {
 		});
 		$(this).find(".uoj-problem-tag").uoj_problem_tag();
 		$(this).find(".uoj-blog-tag").uoj_blog_tag();
+		$(this).find(".uoj-click-zan-block").click_zan_block();
 		$(this).find(".countdown").countdown();
 		$(this).find(".uoj-readmore").readmore({
 			moreLink: '<a href="#" class="text-right">more...</a>',
@@ -400,24 +537,25 @@ $(document).ready(function() {
 });
 
 // contest notice
-function checkContestNotice(id, lastTime) {
-	$.post('/contest/' + id.toString(), {
-			check_notice : '',
+function checkNotice(lastTime) {
+	$.post(uojHome + '/check-notice', {
 			last_time : lastTime
 		},
 		function(data) {
+            if (data === null) {
+                return;
+            }
 			setTimeout(function() {
-				checkContestNotice(id, data.time);
+				checkNotice(data.time);
 			}, 60000);
-			if (data.msg != undefined) {
-				var len=data.msg.length;
-				for (var i=0;i<len;i++) alert(data.msg[i]);
-			}
+            for (var i = 0; i < data.msg.length; i++) {
+                alert(data.msg[i]);
+            }
 		},
 		'json'
 	).fail(function() {
 		setTimeout(function() {
-			checkContestNotice(id, lastTime);
+			checkNotice(lastTime);
 		}, 60000);
 	});
 }
@@ -426,11 +564,11 @@ function checkContestNotice(id, lastTime) {
 $.fn.long_table = function(data, cur_page, header_row, get_row_str, config) {
 	return this.each(function() {
 		var table_div = this;
-
+		
 		$(table_div).html('');
-
+		
 		var page_len = config.page_len != undefined ? config.page_len : 10;
-
+		
 		if (!config.echo_full) {
 			var n_rows = data.length;
 			var n_pages = Math.max(Math.ceil(n_rows / page_len), 1);
@@ -449,10 +587,10 @@ $.fn.long_table = function(data, cur_page, header_row, get_row_str, config) {
 			cur_page = 1;
 			var cur_start = (cur_page - 1) * page_len;
 		}
-
+		
 		var div_classes = config.div_classes != undefined ? config.div_classes : ['table-responsive'];
 		var table_classes = config.table_classes != undefined ? config.table_classes : ['table', 'table-bordered', 'table-hover', 'table-striped', 'table-text-center'];
-
+		
 		var now_cnt = 0;
 		var tbody = $('<tbody />')
 		for (var i = 0; i < page_len && cur_start + i < n_rows; i++) {
@@ -466,26 +604,30 @@ $.fn.long_table = function(data, cur_page, header_row, get_row_str, config) {
 		if (now_cnt == 0) {
 			tbody.append('<tr><td colspan="233">无</td></tr>');
 		}
-
+		
 		$(table_div).append(
 			$('<div class="' + div_classes.join(' ') + '" />').append(
 				$('<table class="' + table_classes.join(' ') + '" />').append(
-					$('<thead>' + header_row + '</thead>')
+					$('<thead />').append(header_row)
 				).append(
 					tbody
 				)
 			)
 		);
-
+		
 		if (config.print_after_table != undefined) {
 			$(table_div).append(config.print_after_table());
 		}
-
+		
+		if (config.mathjax) {
+			MathJax.typesetPromise([table_div]);
+		}
+		
 		var get_page_li = function(p, h) {
 			if (p == -1) {
 				return $('<li></li>').addClass('disabled').append($('<a></a>').append(h));
 			}
-
+			
 			var li = $('<li></li>');
 			if (p == cur_page) {
 				li.addClass('active');
@@ -500,8 +642,7 @@ $.fn.long_table = function(data, cur_page, header_row, get_row_str, config) {
 			);
 			return li;
 		};
-
-		if (n_pages > 1) {
+		var get_pagination = function() {
 			var pagination = $('<ul class="pagination top-buffer-no bot-buffer-sm"></ul>');
 			if (cur_page > 1) {
 				pagination.append(get_page_li(cur_page - 1, '<span class="glyphicon glyphicon glyphicon-backward"></span>'));
@@ -517,7 +658,14 @@ $.fn.long_table = function(data, cur_page, header_row, get_row_str, config) {
 			} else {
 				pagination.append(get_page_li(-1, '<span class="glyphicon glyphicon glyphicon-forward"></span>'));
 			}
-			$(table_div).append($('<div class="text-center"></div>').append(pagination));
+			return pagination;
+		}
+		
+		if (n_pages > 1) {
+			$(table_div).append($('<div class="text-center"></div>').append(get_pagination()));
+			if (config.top_pagination) {
+				$(table_div).prepend($('<div class="text-center"></div>').append(get_pagination()));
+			}
 		}
 	});
 };
@@ -538,14 +686,20 @@ function get_codemirror_mode(lang) {
 	switch (lang) {
 		case 'C++':
 		case 'C++11':
+		case 'C++14':
+		case 'C++17':
+		case 'C++20':
 			return 'text/x-c++src';
 		case 'C':
 			return 'text/x-csrc';
-		case 'Python2':
+		case 'Python2.7':
 		case 'Python3':
 			return 'text/x-python';
+		case 'Java7':
 		case 'Java8':
 		case 'Java11':
+		case 'Java14':
+		case 'Java17':
 			return 'text/x-java';
 		case 'Pascal':
 			return 'text/x-pascal';
@@ -578,20 +732,41 @@ function require_codemirror_mode(mode, callback) {
 	}
 };
 
-// auto save
-function autosave_locally(interval, name, target) {
+function is_localStorage_supported() {
 	if (typeof(Storage) === "undefined") {
 		console.log('autosave_locally: Sorry! No Web Storage support..');
+		return false;
+	} else {
+		return true;
+	}
+}
+
+function local_var_at_this_page(name, val) {
+	if (!is_localStorage_supported()) {
 		return;
 	}
+
 	var url = window.location.href;
 	var hp = url.indexOf('#');
-	var uri = hp == -1 ? url : url.substr(0, hp);
+	var uri = hp == -1 ? url : url.substring(0, hp);
 	var full_name = name + '@' + uri;
 
-	target.val(localStorage.getItem(full_name));
+	if (val === undefined) {
+		return localStorage.getItem(full_name);
+	} else {
+		localStorage.setItem(full_name, val)
+	}
+}
+
+// auto save
+function autosave_locally(interval, name, target) {
+	if (!is_localStorage_supported()) {
+		return;
+	}
+
+	target.val(local_var_at_this_page(name));
 	var save = function() {
-		localStorage.setItem(full_name, target.val());
+		local_var_at_this_page(name, target.val());
 		setTimeout(save, interval);
 	};
 	setTimeout(save, interval);
@@ -651,7 +826,7 @@ $.fn.source_code_form_group = function(name, text, langs_options_html) {
 		var div_help_language = $('<div id="' + div_help_language_id + '" class="col-sm-12 text-warning top-buffer-sm">');
 
 		var show_help_lang = function() {
-			if ($(this).val() == 'Java8' || $(this).val() == 'Java11') {
+			if ($(this).val().startsWith('Java')) {
 				div_help_language.text('注意：Java 程序源代码中不应指定所在的 package。我们会在源代码中找到第一个被定义的类并以它的 main 函数为程序入口点。');
 			} else {
 				div_help_language.text('');
@@ -935,6 +1110,70 @@ $.fn.text_file_form_group = function(name, text) {
 	});
 }
 
+function quiz_problem_form_init(form_name) {
+	var inputs = {}
+
+	$('#form-' + form_name + ' *').filter(':input').each(function() {
+		var name = this.name;
+		switch (this.type) {
+			case 'checkbox':
+				inputs[name] = this.type;
+				if (is_localStorage_supported()) {
+					var varname = name + '_' + this.value;
+					var checked = local_var_at_this_page(varname);
+					if (checked !== null) {
+						this.checked = checked === 'true';
+					}
+					$(this).change(function() {
+						local_var_at_this_page(varname, this.checked);
+					});
+				}
+				break;
+			case 'radio':
+				inputs[name] = this.type;
+				if (is_localStorage_supported()) {
+					var value = local_var_at_this_page(name);
+					if (value !== null) {
+						this.checked = this.value == value;
+					}
+					$(this).change(function() {
+						local_var_at_this_page(name, $('input[name="' + name + '"]:checked').val());
+					});
+				}
+				break;
+		}
+	});
+
+	$('#form-' + form_name).submit(function(e) {
+		var ok = true;
+		var empty_list = [];
+		for (var name in inputs) {
+			var type = inputs[name];
+			var qid = parseInt(name.substring((form_name + '_Q').length));
+			switch (type) {
+				case 'checkbox':
+				case 'radio':
+					if ($('input[name="' + name + '"]:checked').length == 0) {
+						empty_list.push(qid);
+					}
+					break;
+			}
+		}
+
+		if (empty_list.length > 0) {
+			if (!confirm(uojLocale("quiz::empty answer alert", empty_list))) {
+				ok = false;
+			}
+		}
+
+		if (ok) {
+			disableFormSubmit(form_name);
+		}
+
+		return ok;
+	});
+}
+
 // custom test
 function custom_test_onsubmit(response_text, div_result, url) {
 	if (response_text != '') {
@@ -976,7 +1215,7 @@ function showCommentReplies(id, replies) {
 		if (text == undefined) {
 			text = '';
 		}
-
+		
 		var p = '#comment-body-' + id;
 		var q = '#div-form-reply';
 		var r = '#input-reply_comment';
@@ -1004,11 +1243,11 @@ function showCommentReplies(id, replies) {
 		e.preventDefault();
 		toggleFormReply(id);
 	});
-
+	
 	if (replies.length == 0) {
 		return;
 	}
-
+	
 	$("#replies-" + id).long_table(
 		replies,
 		1,
@@ -1035,59 +1274,294 @@ function showCommentReplies(id, replies) {
 		}, {
 			table_classes: ['table', 'table-condensed'],
 			page_len: 5,
+			mathjax: true,
 			prevent_focus_on_click: true
 		}
 	);
 }
 
-// standings
-function showStandings() {
-	$("#standings").long_table(
-		standings,
-		1,
-		'<tr>' +
-			'<th style="width:5em">#</th>' +
-			'<th style="width:14em">'+uojLocale('username')+'</th>' +
-			'<th style="width:5em">'+uojLocale('contests::total score')+'</th>' +
-			$.map(problems, function(col, idx) {
-				if(!problems[idx][1])
-					return '<th style="width:8em;">' + '<a href="/contest/' + contest_id + '/problem/' + col[0] + '">' + (1 + idx) + '</a>' + '</th>';
-				else
-					return '<th style="width:8em;">' + (1 + idx) + '</a>' + '</th>';
-			}).join('') +
-		'</tr>',
-		function(row) {
-			var col_tr = '<tr>';
-			if (row[2][2]=='1') {
-				col_tr += '<td>' + row[3] + '+</td>';
-			}else{
-				col_tr += '<td>' + row[3] + '</td>';
+function getACMStandingsMeta() {
+	var stat = {};
+	var full_score = 0;
+	
+	for (var k = 0; k < problems.length; k++) {
+		var pid = problems[k];
+		stat[pid] = {};
+		stat[pid].cnt = 0;
+		stat[pid].ac_cnt = 0;
+		stat[pid].earliest = null;
+		if (("problem_" + pid) in bonus) {
+			for (var j in score) {
+				if (score[j][k] != undefined) {
+					stat[pid].cnt += score[j][k][3];
+					if (score[j][k][1] === -1200) {
+						stat[pid].ac_cnt++;
+					}
+				}
 			}
-			col_tr += '<td>' + getUserLink(row[2][0], row[2][1]) + '</td>';
-			col_tr += '<td>' + '<div><span class="uoj-score" data-max="' + problems.length * 100 + '" style="color:' + getColOfScore(row[0] / problems.length) + '">' + row[0] + '</span></div>' + '<div>' + getPenaltyTimeStr(row[1]) + '</div></td>';
-			for (var i = 0; i < problems.length; i++) {
-				col_tr += '<td>';
-				col = score[row[2][0]][i];
-				if (col != undefined) {
-					col_tr += '<div><a href="/submission/' + col[2] + '" class="uoj-score" style="color:' + getColOfScore(col[0]) + '">' + col[0] + '</a></div>';
-					if (standings_version < 2) {
-						col_tr += '<div>' + getPenaltyTimeStr(col[1]) + '</div>';
-					} else {
-						if (col[0] > 0) {
-							col_tr += '<div>' + getPenaltyTimeStr(col[1]) + '</div>';
+		} else {
+			full_score += 100;
+			for (var j in score) {
+				if (score[j][k] != undefined) {
+					stat[pid].cnt += score[j][k][3];
+					if (score[j][k][0] === 100) {
+						stat[pid].ac_cnt++;
+						if (stat[pid].earliest === null || score[j][k][2] < stat[pid].earliest) {
+							stat[pid].earliest = score[j][k][2];
 						}
 					}
 				}
-				col_tr += '</td>';
-			}
-			col_tr += '</tr>';
-			return col_tr;
-		}, {
-			table_classes: ['table', 'table-bordered', 'table-striped', 'table-text-center', 'table-vertical-middle', 'table-condensed'],
-			page_len: 100,
-			print_after_table: function() {
-				return '<div class="text-right text-muted">' + uojLocale("contests::n participants", standings.length) + '</div>';
 			}
 		}
-	);
+	}
+	return { stat, full_score };
+}
+
+function setACMStandingsTH(th, i, meta) {
+	if (i == -3) {
+		return $(th).css('width', '34px').text('#');
+	} else if (i == -2) {
+		if (problems.length <= 10) {
+			$(th).css('width', '114px');
+		}
+		return $(th).text(uojLocale('username'));
+	} else if (i == -1) {
+		return $(th).css('width', '57px').text('=');
+	}
+
+	var pid = problems[i];
+	
+	$(th).css('width', '57px');
+	if (("problem_" + pid) in bonus) {
+		$(th).attr('title', '附加题，通过后减免20分钟罚时');
+	}
+	var th_str = '<div><a href="/contest/' + contest_id + '/problem/' + pid + '">' + String.fromCharCode('A'.charCodeAt(0) + i);
+	if (("problem_" + pid) in bonus) {
+		th_str += '*';
+	}
+	th_str += '</a></div>';
+	if (meta && pid in meta.stat) {
+		th_str += '<div>' + meta.stat[pid].ac_cnt + '/' + meta.stat[pid].cnt + '</div>';
+	}
+	return $(th).html(th_str);
+}
+
+function setACMStandingsTD(td, row, i, meta) {
+	if (i == -3) {
+		return $(td).attr('class', '').html(row[3]);
+	} else if (i == -2) {
+		if (2 in row[2]) {
+			let td_title = row[2][2]['team_name'] + "\n";
+			for (var i = 0; i < row[2][2]['members'].length; i++) {
+				td_title += row[2][2]['members'][i]['name'];
+				td_title += "  （";
+				td_title += row[2][2]['members'][i]['organization'];
+				td_title += "）";
+				if (i < row[2][2]['members'].length - 1) {
+					td_title += "\n";
+				}
+			}
+			return $(td).attr('class', '').attr('title', td_title).html(
+				'<div class="text-center" style="overflow-wrap:anywhere;">' +
+					'<small><strong>' + htmlspecialchars(row[2][2]['team_name']) + '</strong></small>' +
+				'</div>' +
+				'<div>' +
+					'<small>' + getUserLink(row[2][0], row[2][1]) + '</small>' +
+				'</div>'
+			);
+		} else {
+			return $(td).attr('class', '').html(getUserLink(row[2][0], row[2][1]));
+		}
+	} else if (i == -1) {
+		let td_title = "总分：" + row[0] + "\n";
+		td_title += "罚时：" + row[1] + "，即 " + getPenaltyTimeStr(row[1]);
+		return $(td).attr('class', 'standings-score-td').attr('title', td_title).html(
+			'<div>' +
+				'<span class="uoj-score" data-max="' + meta.full_score + '" style="color:' + getColOfScore(row[0] * 100 / meta.full_score) + '">' +
+					row[0] +
+				'</span>' +
+			'</div>' +
+			'<div>' +
+				'<small>' + getPenaltyTimeStr(row[1]) + '</small>' +
+			'</div>'
+		);
+	}
+
+	var col = score[row[2][0]][i];
+	
+	$(td).attr('class', 'standings-score-td');
+	
+	if (col === undefined) {
+		return $(td).html('');
+	}
+	
+	var td_title = String.fromCharCode('A'.charCodeAt(0) + i) + "题\n";
+	var td_content = '';
+	
+	if (("problem_" + problems[i]) in bonus) {
+		td_content += '<div>';
+		if (col[0] !== null) {
+			if (col[1] == -1200) {
+				td_content += '<a href="/submission/' + col[2] + '" class="uoj-score" data-score="100" style="color:' + getColOfScore(100) + '">';
+				td_content += '+';
+				td_content += '</a>';
+				
+				td_title += col[3] + " 次有效提交后通过，减免罚时 20 分钟";
+			} else {
+				td_content += '<a href="/submission/' + col[2] + '" class="uoj-score" data-score="0" style="color:' + getColOfScore(0) + '">';
+				td_content += 0;
+				td_content += '</a>';
+				
+				td_title += "尚未通过，未减免罚时";
+				td_title += "\n" + col[3] + " 次有效提交";
+			}
+			if (col[5] > 0) {
+				td_content += ' + ';
+				td_title += "\n" + "因封榜有 " + col[5] + " 次提交结果未知";
+			}
+		} else {
+			td_title += "封榜后提交了 " + col[5] + " 次，结果未知";
+		}
+		
+		if (col[5] > 0) {
+			td_content += '<strong class="text-muted">?</strong>';
+		}
+		td_content += '</div>';
+		
+		if (col[4] > 0) {
+			td_content += '<div><small>';
+			td_content += '(+' + col[4] + ')';
+			td_content += '</small></div>';
+		}
+	} else {
+		td_content += '<div>';
+		if (col[0] !== null) {
+			td_content += '<a href="/submission/' + col[2] + '" class="uoj-score" style="color:' + getColOfScore(col[0]) + '">';
+			td_content += col[0];
+			td_content += '</a>';
+			
+			td_title += "得分：" + col[0] + " 分";
+			td_title += "\n" + col[3] + " 次有效提交";
+			
+			if (col[5] > 0) {
+				td_content += ' + ';
+				td_title += "\n" + "因封榜有 " + col[5] + " 次提交结果未知";
+			}
+		} else {
+			td_title += "封榜后提交了 " + col[5] + " 次，结果未知";
+		}
+		if (col[5] > 0) {
+			td_content += '<strong class="text-muted">?</strong>';
+		}
+		td_content += '</div>';
+		
+		if (col[0] > 0) {
+			let orig_penalty = col[1] - col[4] * 60 * 20;
+			td_content += '<div><small>' + getPenaltyTimeStr(orig_penalty) + '</small></div>';
+			
+			if (col[4] > 0) {
+				td_title += "\n" + col[4] + " 次提交计入罚时";
+			}
+			td_title += "\n" + "罚时：" + orig_penalty;
+			if (col[4] > 0) {
+				td_title += " + " + col[4] + " × 1200 = " + col[1];
+			}
+			td_title += "，即 " + getPenaltyTimeStr(orig_penalty);
+		}
+		
+		if (col[4] > 0) {
+			td_content += '<div><small>';
+			td_content += '(+' + col[4] + ')';
+			td_content += '</small></div>';
+		}
+	}
+
+	if (meta.stat[problems[i]].earliest === col[2]) {
+		$(td).addClass('first-blood');
+	}
+	return $(td).attr('title', td_title).html(td_content);
+}
+
+// standings
+function showStandings() {
+	if (contest_rule == 'UOJ-OI' || contest_rule == 'UOJ-IOI') {
+		$("#standings").long_table(
+			standings,
+			1,
+			'<tr>' +
+				'<th style="width:5em">#</th>' +
+				'<th style="width:14em">'+uojLocale('username')+'</th>' +
+				'<th style="width:5em">'+uojLocale('contests::total score')+'</th>' +
+				$.map(problems, function(col, idx) {
+					return '<th style="width:8em;">' + '<a href="/contest/' + contest_id + '/problem/' + col + '">' + String.fromCharCode('A'.charCodeAt(0) + idx) + '</a>' + '</th>';
+				}).join('') +
+			'</tr>',
+			function(row) {
+				var col_tr = '';
+				if (myname != row[2][0]) {
+					col_tr += '<tr>';
+				} else {
+					col_tr += '<tr class="warning">';
+				}
+				col_tr += '<td>' + row[3] + '</td>';
+				col_tr += '<td>' + getUserLink(row[2][0], row[2][1]) + '</td>';
+				col_tr += '<td>' + '<div><span class="uoj-score" data-max="' + problems.length * 100 + '" style="color:' + getColOfScore(row[0] / problems.length) + '">' + row[0] + '</span></div>' + '<div>' + getPenaltyTimeStr(row[1]) + '</div></td>';
+				for (var i = 0; i < problems.length; i++) {
+					col_tr += '<td>';
+					col = score[row[2][0]][i];
+					if (col != undefined) {
+						col_tr += '<div><a href="/submission/' + col[2] + '" class="uoj-score" style="color:' + getColOfScore(col[0]) + '">' + col[0] + '</a></div>';
+						if (standings_version < 2) {
+							col_tr += '<div>' + getPenaltyTimeStr(col[1]) + '</div>';
+						} else {
+							if (col[0] > 0) {
+								col_tr += '<div>' + getPenaltyTimeStr(col[1]) + '</div>';
+							}
+						}
+					}
+					col_tr += '</td>';
+				}
+				col_tr += '</tr>';
+				return col_tr;
+			}, {
+				table_classes: ['table', 'table-bordered', 'table-striped', 'table-text-center', 'table-vertical-middle', 'table-condensed'],
+				page_len: 100,
+				top_pagination: true,
+			    max_extend: 10,
+				print_after_table: function() {
+					return '<div class="text-right text-muted">' + uojLocale("contests::n participants", standings.length) + '</div>';
+				}
+			}
+		);
+	} else if (contest_rule == 'UOJ-ACM') {
+		var meta = getACMStandingsMeta();
+		var header = $('<tr />');
+		for (let i = -3; i < problems.length; i++) {
+			header.append(setACMStandingsTH(document.createElement('th'), i, meta));
+		}
+	    
+	    $("#standings").long_table(
+		    standings,
+		    1,
+			header,
+		    function(row) {
+				var tr = $('<tr />').css('height', '57px');
+				if (myname == row[2][0]) {
+					tr.addClass('warning');
+				}
+			    for (let i = -3; i < problems.length; i++) {
+					tr.append(setACMStandingsTD(document.createElement('td'), row, i, meta));
+			    }
+				return tr;
+		    }, {
+			    table_classes: ['table', 'table-bordered', 'table-striped', 'table-text-center', 'table-vertical-middle', 'table-condensed'],
+			    page_len: 100,
+			    top_pagination: true,
+			    max_extend: 10,
+			    print_after_table: function() {
+				    return '<div class="text-right text-muted">' + uojLocale("contests::n participants", standings.length) + '</div>';
+			    }
+		    }
+	    );
+	}
 }
